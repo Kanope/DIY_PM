@@ -5,9 +5,8 @@
 #include "Adafruit_HTU21DF.h" //TEMPERATURE/HUMIDITY SENSOR LIBRARY
 #include <RTCZero.h>          //RTC LIBRARY
 #include <SensirionI2CScd4x.h>
+#include <SensirionI2CSvm40.h>
 #include <MKRWAN.h>            //LORAWAN LIBRARY
-#include "sgp40_voc_index.h"
-
 
 //Please note that, if the processor is sleeping, a new sketch can't be uploaded. To overcome this, manually reset the board (usually with a single or double tap to the RESET button)
 
@@ -44,6 +43,7 @@ float moyHum = 0;                               //moyHum variable declaration
 float moyPM25 = 0;                              //moyPM25 variable declaration
 float moyPM10 = 0;                              //moyPM10 variable declaration
 float moyCo2 = 0;                              //moyPM10 variable declaration
+int16_t vocIndex = 0;
 //Function definitions
 void dopulse(void); //Pulse methode definition
 void sendLoraMessage(void);//Send message using Lora definition
@@ -51,6 +51,7 @@ void ledBlink(void);
 
 
 SensirionI2CScd4x scd4x;
+SensirionI2CSvm40 svm40;
 
 void printUint16Hex(uint16_t value) {
     Serial.print(value < 4096 ? "0" : "");
@@ -119,7 +120,7 @@ void sendLoraMessage(void)
     //modem.print(stringOne);
     modem.write(int(moyTemp * 100) | ((int(moyHum * 100))<<16));
     modem.write(int(moyPM25 * 100) | ((int(moyPM10 * 100))<<16));
-    modem.write(int(moyCo2));
+    modem.write(int(moyCo2) | ((int(vocIndex)<<16)));
     err = modem.endPacket(true);
     if (err > 0) 
     {
@@ -164,7 +165,6 @@ void dopulse(void) //Pulse methode declaration
 void setup() 
 {
   Wire.begin();
-  int16_t err;
   uint16_t error;
   char errorMessage[256];
   pinMode(RESET, OUTPUT);                 //RESET pin OUTPUT configuration
@@ -193,19 +193,77 @@ void setup()
   Serial.println(sds.queryFirmwareVersion().toString()); // prints firmware version
   Serial.println(sds.setActiveReportingMode().toString()); // ensures sensor is in 'active' reporting mode
   Serial.println(sds.setContinuousWorkingPeriod().toString()); // ensures sensor has continuous working period - default but not recommended
-  
-    /* Initialize I2C bus, SHT, SGP and VOC Engine */
-  while ((err = sensirion_init_sensors())) {
-    Serial.print("initialization failed: ");
-    Serial.println(err);
-    sensirion_sleep_usec(1000000); /* wait one second */
-  }
-  Serial.println("initialization successful");
-  
-  
+
+  svm40.begin(Wire);
+
+    error = svm40.deviceReset();
+    if (error) {
+        Serial.print("Error trying to execute deviceReset(): ");
+        errorToString(error, errorMessage, 256);
+        Serial.println(errorMessage);
+    }
+
+    // Delay to let the serial monitor catch up
+    delay(2000);
+
+    uint8_t serialNumber[32];
+    uint8_t serialNumberSize = 32;
+    error = svm40.getSerialNumber(serialNumber, serialNumberSize);
+    if (error) {
+        Serial.print("Error trying to execute getSerialNumber(): ");
+        errorToString(error, errorMessage, 256);
+        Serial.println(errorMessage);
+    } else {
+        Serial.print("SerialNumber:");
+        Serial.println((char*)serialNumber);
+    }
+
+    uint8_t firmwareMajor;
+    uint8_t firmwareMinor;
+    bool firmwareDebug;
+    uint8_t hardwareMajor;
+    uint8_t hardwareMinor;
+    uint8_t protocolMajor;
+    uint8_t protocolMinor;
+    error = svm40.getVersion(firmwareMajor, firmwareMinor, firmwareDebug,
+                             hardwareMajor, hardwareMinor, protocolMajor,
+                             protocolMinor);
+    if (error) {
+        Serial.print("Error trying to execute getVersion(): ");
+        errorToString(error, errorMessage, 256);
+        Serial.println(errorMessage);
+    } else {
+        Serial.print("Firmware: ");
+        Serial.print(firmwareMajor);
+        Serial.print(".");
+        Serial.print(firmwareMinor);
+        Serial.print(" Debug: ");
+        Serial.println(firmwareDebug);
+        Serial.print("Hardware: ");
+        Serial.print(hardwareMajor);
+        Serial.print(".");
+        Serial.println(hardwareMinor);
+        Serial.print("Protocol: ");
+        Serial.print(protocolMajor);
+        Serial.print(".");
+        Serial.println(protocolMinor);
+        if (firmwareMajor < 2 || (firmwareMajor == 2 && firmwareMinor < 2)) {
+            Serial.println("Warning: Old firmware version which may return "
+                           "constant values after a few hours of operation");
+        }
+    }
+
+    // Start Measurement
+    error = svm40.startContinuousMeasurement();
+    if (error) {
+        Serial.print("Error trying to execute startContinuousMeasurement(): ");
+        errorToString(error, errorMessage, 256);
+        Serial.println(errorMessage);
+    }
+    
   scd4x.begin(Wire);
 
-      // stop potentially previously started measurement
+  // stop potentially previously started measurement
   error = scd4x.stopPeriodicMeasurement();
   if (error) 
   {
@@ -245,29 +303,30 @@ void setup()
 //Main process looping each secondes
 void loop()
 {
-    int16_t err;
-  int32_t voc_index;
-  int32_t temperature_celsius;
-  int32_t relative_humidity_percent;
-  err = sensirion_measure_voc_index_with_rh_t(
-          &voc_index, &relative_humidity_percent, &temperature_celsius );
-  if (err == STATUS_OK) {
-    Serial.print("VOCindex:");
-    Serial.print(voc_index);
-    Serial.print("\t");
-    Serial.print("Humidity[%RH]:");
-    Serial.print(relative_humidity_percent * 0.001f);
-    Serial.print("\t");
-    Serial.print("Temperature[degC]:");
-    Serial.println(temperature_celsius * 0.001f);
-  } else {
-    Serial.print("error reading signal: ");
-    Serial.println(err);
-  }
   
+    uint16_t error;
+    char errorMessage[256];
+    // Read Measurement
+    
+    int16_t humidity;
+    int16_t temperature;
+    error = svm40.readMeasuredValuesAsIntegers(vocIndex, humidity, temperature);
+    if (error) {
+        Serial.print(
+            "Error trying to execute readMeasuredValuesAsIntegers(): ");
+        errorToString(error, errorMessage, 256);
+        Serial.println(errorMessage);
+    } else {
+        Serial.print("VocIndex:");
+        Serial.print(vocIndex / 10.0);
+        Serial.print("\t");
+        Serial.print("Humidity:");
+        Serial.print(humidity / 100.0);
+        Serial.print("\t");
+        Serial.print("Temperature:");
+        Serial.println(temperature / 200.0);
+    }
   
-  uint16_t error;
-  char errorMessage[256];
   float temperature_scd4x;
   float humidity_scd4x;
   error = scd4x.readMeasurement(co2_scd4x, temperature_scd4x, humidity_scd4x);

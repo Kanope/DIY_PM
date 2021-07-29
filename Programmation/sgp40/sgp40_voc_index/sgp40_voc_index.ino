@@ -32,8 +32,9 @@
 #include "sgp40_voc_index.h"
 #define ACTIVEPM 9  //GPIO 9 ACTIVE PM SENSOR
 void setup() {
-  digitalWrite(ACTIVEPM, HIGH);
+  //digitalWrite(ACTIVEPM, HIGH);
   int16_t err;
+  sensirion_sleep_usec(3000000); /* wait one second */
   Serial.begin(115200);  // start serial for output
 
   // wait for serial connection from PC
