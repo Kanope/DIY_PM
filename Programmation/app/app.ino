@@ -308,9 +308,9 @@ void loop()
     char errorMessage[256];
     // Read Measurement
     
-    int16_t humidity;
-    int16_t temperature;
-    error = svm40.readMeasuredValuesAsIntegers(vocIndex, humidity, temperature);
+    int16_t humidity_svm40;
+    int16_t temperature_svm40;
+    error = svm40.readMeasuredValuesAsIntegers(vocIndex, humidity_svm40, temperature_svm40);
     if (error) {
         Serial.print(
             "Error trying to execute readMeasuredValuesAsIntegers(): ");
@@ -321,10 +321,10 @@ void loop()
         Serial.print(vocIndex / 10.0);
         Serial.print("\t");
         Serial.print("Humidity:");
-        Serial.print(humidity / 100.0);
+        Serial.print(humidity_svm40 / 100.0);
         Serial.print("\t");
         Serial.print("Temperature:");
-        Serial.println(temperature / 200.0);
+        Serial.println(temperature_svm40 / 200.0);
     }
   
   float temperature_scd4x;
