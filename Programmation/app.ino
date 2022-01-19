@@ -21,6 +21,7 @@ String appKey = SECRET_APP_KEY;
 #define ACTIVETH 10 //GPIO 10 ACTIVE TEMPERATURE/HUMIDITY SENSOR
 #define RESET 8     //GPIO 8 RESET PIN
 #define PULSE 7     //GPIO 7 PEEK PULSE PIN
+#define FIRSTCONFIG 0     //GPIO 6 CONFIGURATION PIN
 
 //Global variables
 SdsDustSensor sds(Serial1);                     //Sensor PM declaration
@@ -60,6 +61,92 @@ void ledBlink(void)
     digitalWrite(LED_BUILTIN, 0);
   }
 }
+
+void firstConfiguration(void)
+{
+  LoRaModem modem;
+  String appEui;
+  String appKey;
+  String devAddr;
+  String nwkSKey;
+  String appSKey;
+  Serial.println("Welcome to MKR WAN 1300/1310 first configuration sketch");
+  Serial.println("Register to your favourite LoRa network and we are ready to go!");
+    if (!modem.begin(EU868)) {
+    Serial.println("Failed to start module");
+    while (1) {}
+  };
+  Serial.print("Your module version is: ");
+  Serial.println(modem.version());
+  if (modem.version() != ARDUINO_FW_VERSION) {
+    Serial.println("Please make sure that the latest modem firmware is installed.");
+    Serial.println("To update the firmware upload the 'MKRWANFWUpdate_standalone.ino' sketch.");
+  }
+  Serial.print("Your device EUI is: ");
+  Serial.println(modem.deviceEUI());
+
+  int mode = 0;
+  while (mode != 1 && mode != 2) {
+    Serial.println("Are you connecting via OTAA (1) or ABP (2)?");
+    while (!Serial.available());
+    mode = Serial.readStringUntil('\n').toInt();
+  }
+
+  int connected;
+  if (mode == 1) {
+    Serial.println("Enter your APP EUI");
+    while (!Serial.available());
+    appEui = Serial.readStringUntil('\n');
+
+    Serial.println("Enter your APP KEY");
+    while (!Serial.available());
+    appKey = Serial.readStringUntil('\n');
+
+    appKey.trim();
+    appEui.trim();
+
+    connected = modem.joinOTAA(appEui, appKey);
+  } else if (mode == 2) {
+
+    Serial.println("Enter your Device Address");
+    while (!Serial.available());
+    devAddr = Serial.readStringUntil('\n');
+
+    Serial.println("Enter your NWS KEY");
+    while (!Serial.available());
+    nwkSKey = Serial.readStringUntil('\n');
+
+    Serial.println("Enter your APP SKEY");
+    while (!Serial.available());
+    appSKey = Serial.readStringUntil('\n');
+
+    devAddr.trim();
+    nwkSKey.trim();
+    appSKey.trim();
+
+    connected = modem.joinABP(devAddr, nwkSKey, appSKey);
+  }
+
+  if (!connected) {
+    Serial.println("Something went wrong; are you indoor? Move near a window and retry");
+    while (1) {}
+  }
+
+  delay(5000);
+
+  int err;
+  modem.setPort(3);
+  modem.beginPacket();
+  modem.print("HeLoRA world!");
+  err = modem.endPacket(true);
+  if (err > 0) {
+    Serial.println("Message sent correctly!");
+  } else {
+    Serial.println("Error sending message :(");
+  }
+}
+
+
 
 //Send message using Lora declaration
 void sendLoraMessage(void)
@@ -131,6 +218,7 @@ void dopulse(void) //Pulse methode declaration
 
 void setup() 
 {
+  pinMode(FIRSTCONFIG, INPUT_PULLUP);// turn on pullup resistors   
   pinMode(RESET, OUTPUT);                 //RESET pin OUTPUT configuration
   digitalWrite(RESET, HIGH);              //RESET pin to HIGH (disable)
   pinMode(PULSE, OUTPUT);                 //PULSE pin OUTPUT configuration
@@ -144,22 +232,29 @@ void setup()
   digitalWrite(ACTIVEPM, HIGH);           //ACTIVEPM pin to HIGH (disable)
   digitalWrite(ACTIVETH, HIGH);           //ACTIVETH pin to HIGH (disable)
   pinMode(LED_BUILTIN, OUTPUT);           //LED_BUILTIN pin OUTPUT configuration
+ if(digitalRead(FIRSTCONFIG) == 0)
+ {
+    firstConfiguration();
+ }
+ 
   sds.begin();                            //PM sensor declaration
   if (!htu.begin())                       //Humidity and temperature sensor declaration
   {
     Serial.println("Couldn't find sensor!");
   }
+  PmResult pm = sds.readPm();
   delay(1000);                            //1000ms Delay
-  PmResult pm = sds.readPm();             //Read PM sensor
   Serial.println(sds.queryFirmwareVersion().toString()); // prints firmware version
-  Serial.println(sds.setActiveReportingMode().toString()); // ensures sensor is in 'active' reporting mode
-  Serial.println(sds.setContinuousWorkingPeriod().toString()); // ensures sensor has continuous working period - default but not recommended
+  Serial.println(sds.setQueryReportingMode().toString()); // prints firmware version
+  //Serial.println(sds.setContinuousWorkingPeriod().toString()); // ensures sensor has continuous working period - default but not recommended
+ // Serial.println(sds.setActiveReportingMode().toString()); // ensures sensor is in 'active' reporting mode
+ 
 }
 
 //Main process looping each secondes
 void loop()
 {
-  PmResult pm = sds.readPm();  //Read PM sensor
+  PmResult pm = sds.queryPm();  //Read PM sensor
   if (pm.isOk())               //Check if PM sensor is ok
   {
     Serial.print("PM2.5 = ");
@@ -177,6 +272,7 @@ void loop()
   
   ledBlink();
   
+  Serial.print("pin: "); Serial.print(digitalRead(FIRSTCONFIG));
   //Read humidity and temperature values
   float temp = htu.readTemperature();
   float rel_hum = htu.readHumidity();
@@ -216,5 +312,6 @@ void loop()
     //Pulse process during sleep
     dopulse();
   }
+  //Serial.println(sds.flushStream());
   delay(1000);
 }
