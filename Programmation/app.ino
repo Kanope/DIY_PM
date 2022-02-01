@@ -16,7 +16,7 @@ String devEui = "";
 #define PULSEFREQUENCY 60 //PULSE FREQUENCY IN s
 #define PULSEDURATION 200 //PULSE DURATION IN ms
 #define MEASUREFREQUENCY  1800//MEASUREMENT FREQUENCY IN s ==> 30min * 60s = 1800 secondes
-#define MEASUREDURATION  120//MEASUREMENT DURATION IN s ==> 120 secondes
+int MEASUREDURATION = 120;//MEASUREMENT DURATION IN s ==> 120 secondes
 
 #define ACTIVEPM 9  //GPIO 9 ACTIVE PM SENSOR
 #define ACTIVETH 10 //GPIO 10 ACTIVE TEMPERATURE/HUMIDITY SENSOR
@@ -272,7 +272,8 @@ void setup()
   
    if(digitalRead(FIRSTCONFIG) == 0)
    {
-      firstConfiguration();
+      //firstConfiguration();
+      MEASUREDURATION = 10;
    }
 }
 
