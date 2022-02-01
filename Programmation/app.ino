@@ -11,6 +11,7 @@
 //Please enter your sensitive data in the Secret tab or arduino_secrets.h
 String appEui = SECRET_APP_EUI;
 String appKey = SECRET_APP_KEY;
+String devEui = "";
 
 #define PULSEFREQUENCY 60 //PULSE FREQUENCY IN s
 #define PULSEDURATION 200 //PULSE DURATION IN ms
@@ -21,7 +22,7 @@ String appKey = SECRET_APP_KEY;
 #define ACTIVETH 10 //GPIO 10 ACTIVE TEMPERATURE/HUMIDITY SENSOR
 #define RESET 8     //GPIO 8 RESET PIN
 #define PULSE 7     //GPIO 7 PEEK PULSE PIN
-#define FIRSTCONFIG 0     //GPIO 6 CONFIGURATION PIN
+#define FIRSTCONFIG 0     //GPIO 0 CONFIGURATION PIN
 
 //Global variables
 SdsDustSensor sds(Serial1);                     //Sensor PM declaration
@@ -62,6 +63,28 @@ void ledBlink(void)
   }
 }
 
+void getDeviceInfos(void);
+void getDeviceInfos(void)
+{
+  LoRaModem modem;
+  Serial.println("Welcome to MKR WAN 1300/1310 first configuration sketch");
+  Serial.println("Register to your favourite LoRa network and we are ready to go!");
+    if (!modem.begin(EU868)) {
+    Serial.println("Failed to start module");
+    while (1) {}
+  };
+  Serial.print("Your module version is: ");
+  Serial.println(modem.version());
+  if (modem.version() != ARDUINO_FW_VERSION) {
+    Serial.println("Please make sure that the latest modem firmware is installed.");
+    Serial.println("To update the firmware upload the 'MKRWANFWUpdate_standalone.ino' sketch.");
+  }
+  Serial.print("Your device EUI is: ");
+  devEui = modem.deviceEUI();
+  Serial.println(devEui);
+  Serial.println(appEui);
+  Serial.println(appKey);
+}
 void firstConfiguration(void)
 {
   LoRaModem modem;
@@ -147,7 +170,6 @@ void firstConfiguration(void)
 }
 
 
-
 //Send message using Lora declaration
 void sendLoraMessage(void)
 {
@@ -213,7 +235,8 @@ void dopulse(void) //Pulse methode declaration
       Serial.print(", index = ");
     }
     Serial.print("RESET");  //PRINT ON TERMINAL
-    digitalWrite(RESET, LOW); //ACTIVE RESET PIN  //Reset when the timer reach 30 min
+   // digitalWrite(RESET, LOW); //ACTIVE RESET PIN  //Reset when the timer reach 30 min
+    NVIC_SystemReset();
 }
 
 void setup() 
@@ -224,31 +247,33 @@ void setup()
   pinMode(PULSE, OUTPUT);                 //PULSE pin OUTPUT configuration
   digitalWrite(PULSE, LOW);               //PULSE pin to LOW (disable)
   delay(200);                             //200ms Delay
-  
-  //pinMode(RESET, OUTPUT); 
+
   Serial.begin(115200);                   //Serial port declaration
   pinMode(ACTIVEPM, OUTPUT);              //ACTIVEPM pin OUTPUT configuration
   pinMode(ACTIVETH, OUTPUT);              //ACTIVETH pin OUTPUT configuration
   digitalWrite(ACTIVEPM, HIGH);           //ACTIVEPM pin to HIGH (disable)
   digitalWrite(ACTIVETH, HIGH);           //ACTIVETH pin to HIGH (disable)
   pinMode(LED_BUILTIN, OUTPUT);           //LED_BUILTIN pin OUTPUT configuration
- if(digitalRead(FIRSTCONFIG) == 0)
- {
-    firstConfiguration();
- }
- 
+  getDeviceInfos();
   sds.begin();                            //PM sensor declaration
+  
   if (!htu.begin())                       //Humidity and temperature sensor declaration
   {
     Serial.println("Couldn't find sensor!");
   }
   PmResult pm = sds.readPm();
+  
   delay(1000);                            //1000ms Delay
   Serial.println(sds.queryFirmwareVersion().toString()); // prints firmware version
   Serial.println(sds.setQueryReportingMode().toString()); // prints firmware version
   //Serial.println(sds.setContinuousWorkingPeriod().toString()); // ensures sensor has continuous working period - default but not recommended
  // Serial.println(sds.setActiveReportingMode().toString()); // ensures sensor is in 'active' reporting mode
- 
+
+  
+   if(digitalRead(FIRSTCONFIG) == 0)
+   {
+      firstConfiguration();
+   }
 }
 
 //Main process looping each secondes
@@ -272,7 +297,8 @@ void loop()
   
   ledBlink();
   
-  Serial.print("pin: "); Serial.print(digitalRead(FIRSTCONFIG));
+  //Serial.print("pin: "); Serial.print(digitalRead(FIRSTCONFIG));
+  Serial.println(devEui);
   //Read humidity and temperature values
   float temp = htu.readTemperature();
   float rel_hum = htu.readHumidity();
@@ -312,6 +338,5 @@ void loop()
     //Pulse process during sleep
     dopulse();
   }
-  //Serial.println(sds.flushStream());
   delay(1000);
 }
