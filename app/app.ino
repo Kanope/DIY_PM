@@ -300,6 +300,8 @@ void loop()
   
   //Serial.print("pin: "); Serial.print(digitalRead(FIRSTCONFIG));
   Serial.println(devEui);
+  Serial.println(appEui);
+  Serial.println(appKey);
   //Read humidity and temperature values
   float temp = htu.readTemperature();
   float rel_hum = htu.readHumidity();
